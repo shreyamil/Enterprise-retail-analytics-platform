@@ -1,0 +1,55 @@
+digraph Architecture {
+    rankdir=TB;
+    graph [fontname="Helvetica", bgcolor="white", nodesep=0.5, ranksep=0.65, splines=ortho];
+    node [fontname="Helvetica", shape=box, style="rounded,filled", fontsize=12, margin="0.25,0.18"];
+    edge [fontname="Helvetica", fontsize=10, color="#555555", penwidth=1.4, arrowsize=0.8];
+
+    subgraph cluster_data {
+        label="DATA LAYER";
+        fontname="Helvetica-Bold"; fontsize=13; style="rounded"; color="#888888"; bgcolor="#F4F8FC";
+        gen [label="data_generation.py\n\nSynthetic generator:\nseasonality, Zipf popularity,\nrealistic income/margin distributions", fillcolor="#CFE3F7", color="#2E5C8A"];
+        csv [label="5 CSV files\ncustomers · products · sales\ninventory · returns\n(~155,000 rows)", fillcolor="#E8F1FB", color="#2E5C8A"];
+        gen -> csv;
+    }
+
+    subgraph cluster_storage {
+        label="STORAGE LAYER";
+        fontname="Helvetica-Bold"; fontsize=13; style="rounded"; color="#888888"; bgcolor="#FBF4EC";
+        clean [label="cleaning.py\n\nETL: validate, dedup,\nderive dim_stores/warehouses,\nrefresh customer LTV", fillcolor="#F7DFC2", color="#B8542A"];
+        pg [label="PostgreSQL 16\n\nStar Schema:\n4 dimensions + 3 facts\nPKs · FKs · indexes · triggers", fillcolor="#FCEEDD", color="#B8542A"];
+        clean -> pg;
+    }
+
+    subgraph cluster_analysis {
+        label="ANALYSIS LAYER";
+        fontname="Helvetica-Bold"; fontsize=13; style="rounded"; color="#888888"; bgcolor="#F0F7EF";
+        sql [label="analysis_queries.sql\noptimization.sql\n\n69 queries · views\nstored procedures · triggers", fillcolor="#D4ECCF", color="#3F7D3D"];
+        stats [label="statistics.py\n\nCorrelation · Regression\nHypothesis tests · ANOVA\nK-Means · Random Forest", fillcolor="#D4ECCF", color="#3F7D3D"];
+        fcst [label="forecasting.py\n\n5-model comparison\n(MA/ExpSmooth/ARIMA/\nSARIMA/Prophet)\non 12-mo holdout", fillcolor="#D4ECCF", color="#3F7D3D"];
+        ins [label="insights.py\n\nAuto-generates\nbusiness_insights.md", fillcolor="#D4ECCF", color="#3F7D3D"];
+    }
+
+    subgraph cluster_present {
+        label="PRESENTATION LAYER";
+        fontname="Helvetica-Bold"; fontsize=13; style="rounded"; color="#888888"; bgcolor="#F7F0F7";
+        pbi [label="Power BI\n\nStar schema model · 64 DAX measures\n6 dashboard pages:\nExecutive · Sales · Customer\nInventory · Returns · Forecast", fillcolor="#E8D4ED", color="#6B3F7D"];
+        docs [label="docs/\n\nbusiness_insights.md\nforecast outputs (CSV)\nERD · Data Dictionary", fillcolor="#E8D4ED", color="#6B3F7D"];
+    }
+
+    csv -> clean;
+    pg -> sql;
+    csv -> stats [style=dashed, label="  (reads CSV\n  directly)"];
+    csv -> fcst [style=dashed];
+    csv -> ins [style=dashed];
+    sql -> pbi;
+    stats -> ins;
+    fcst -> ins;
+    fcst -> pbi [label="  forecast CSV"];
+    ins -> docs;
+    sql -> docs [style=dashed, label="  views feed\n  Power BI directly"];
+
+    label="Enterprise Retail Analytics Platform — System Architecture";
+    labelloc="t";
+    fontsize=18;
+    fontname="Helvetica-Bold";
+}

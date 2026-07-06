@@ -1,0 +1,101 @@
+digraph ERD {
+    rankdir=LR;
+    graph [fontname="Helvetica", bgcolor="white", splines=ortho, nodesep=0.6, ranksep=1.1];
+    node [fontname="Helvetica", shape=plain];
+    edge [fontname="Helvetica", fontsize=10, color="#555555", penwidth=1.3];
+
+    dim_customers [label=<
+    <table border="1" cellborder="0" cellspacing="0" cellpadding="6" bgcolor="white" color="#2E5C8A">
+        <tr><td bgcolor="#2E5C8A"><font color="white"><b>dim_customers</b></font></td></tr>
+        <tr><td align="left"><b><u>customer_id</u></b> VARCHAR(10) PK</td></tr>
+        <tr><td align="left">age, gender SMALLINT/VARCHAR</td></tr>
+        <tr><td align="left">city, state, country VARCHAR</td></tr>
+        <tr><td align="left">segment VARCHAR(20)</td></tr>
+        <tr><td align="left">income NUMERIC(12,2)</td></tr>
+        <tr><td align="left">signup_date DATE</td></tr>
+        <tr><td align="left">lifetime_value NUMERIC(14,2)</td></tr>
+        <tr><td align="left">loyalty_tier VARCHAR(10)</td></tr>
+    </table>>];
+
+    dim_products [label=<
+    <table border="1" cellborder="0" cellspacing="0" cellpadding="6" bgcolor="white" color="#2E5C8A">
+        <tr><td bgcolor="#2E5C8A"><font color="white"><b>dim_products</b></font></td></tr>
+        <tr><td align="left"><b><u>product_id</u></b> VARCHAR(10) PK</td></tr>
+        <tr><td align="left">category, subcategory VARCHAR</td></tr>
+        <tr><td align="left">brand, product_name VARCHAR</td></tr>
+        <tr><td align="left">cost_price NUMERIC(10,2)</td></tr>
+        <tr><td align="left">selling_price NUMERIC(10,2)</td></tr>
+        <tr><td align="left">supplier VARCHAR(20)</td></tr>
+        <tr><td align="left">launch_date DATE</td></tr>
+    </table>>];
+
+    dim_stores [label=<
+    <table border="1" cellborder="0" cellspacing="0" cellpadding="6" bgcolor="white" color="#2E5C8A">
+        <tr><td bgcolor="#2E5C8A"><font color="white"><b>dim_stores</b></font></td></tr>
+        <tr><td align="left"><b><u>store_id</u></b> VARCHAR(15) PK</td></tr>
+        <tr><td align="left">region VARCHAR(20)</td></tr>
+    </table>>];
+
+    dim_warehouses [label=<
+    <table border="1" cellborder="0" cellspacing="0" cellpadding="6" bgcolor="white" color="#2E5C8A">
+        <tr><td bgcolor="#2E5C8A"><font color="white"><b>dim_warehouses</b></font></td></tr>
+        <tr><td align="left"><b><u>warehouse_id</u></b> VARCHAR(10) PK</td></tr>
+        <tr><td align="left">region VARCHAR(20)</td></tr>
+    </table>>];
+
+    fact_sales [label=<
+    <table border="1" cellborder="0" cellspacing="0" cellpadding="6" bgcolor="white" color="#B8542A">
+        <tr><td bgcolor="#B8542A"><font color="white"><b>fact_sales</b></font></td></tr>
+        <tr><td align="left"><b><u>order_id</u></b> VARCHAR(12) PK</td></tr>
+        <tr><td align="left">order_date DATE</td></tr>
+        <tr><td align="left"><i>customer_id</i> FK &#8594; dim_customers</td></tr>
+        <tr><td align="left"><i>product_id</i> FK &#8594; dim_products</td></tr>
+        <tr><td align="left">quantity SMALLINT</td></tr>
+        <tr><td align="left">discount NUMERIC(5,3)</td></tr>
+        <tr><td align="left">sales_amount NUMERIC(12,2)</td></tr>
+        <tr><td align="left">profit NUMERIC(12,2)</td></tr>
+        <tr><td align="left"><i>store_id</i> FK &#8594; dim_stores</td></tr>
+        <tr><td align="left">payment_method VARCHAR(20)</td></tr>
+        <tr><td align="left">sales_channel VARCHAR(10)</td></tr>
+    </table>>];
+
+    fact_inventory [label=<
+    <table border="1" cellborder="0" cellspacing="0" cellpadding="6" bgcolor="white" color="#B8542A">
+        <tr><td bgcolor="#B8542A"><font color="white"><b>fact_inventory</b></font></td></tr>
+        <tr><td align="left"><b><u>inventory_id</u></b> SERIAL PK</td></tr>
+        <tr><td align="left"><i>product_id</i> FK &#8594; dim_products</td></tr>
+        <tr><td align="left"><i>warehouse_id</i> FK &#8594; dim_warehouses</td></tr>
+        <tr><td align="left">opening_stock INTEGER</td></tr>
+        <tr><td align="left">received_stock INTEGER</td></tr>
+        <tr><td align="left">sold_stock INTEGER</td></tr>
+        <tr><td align="left">damaged_stock INTEGER</td></tr>
+        <tr><td align="left">closing_stock INTEGER</td></tr>
+        <tr><td align="left">reorder_level INTEGER</td></tr>
+        <tr><td align="left">lead_time_days SMALLINT</td></tr>
+        <tr><td align="left">supplier_rating NUMERIC(3,1)</td></tr>
+    </table>>];
+
+    fact_returns [label=<
+    <table border="1" cellborder="0" cellspacing="0" cellpadding="6" bgcolor="white" color="#B8542A">
+        <tr><td bgcolor="#B8542A"><font color="white"><b>fact_returns</b></font></td></tr>
+        <tr><td align="left"><b><u>return_id</u></b> VARCHAR(12) PK</td></tr>
+        <tr><td align="left"><i>order_id</i> FK &#8594; fact_sales</td></tr>
+        <tr><td align="left">reason VARCHAR(60)</td></tr>
+        <tr><td align="left">refund_amount NUMERIC(12,2)</td></tr>
+        <tr><td align="left">return_date DATE</td></tr>
+        <tr><td align="left">return_status VARCHAR(15)</td></tr>
+        <tr><td align="left">days_after_purchase SMALLINT</td></tr>
+    </table>>];
+
+    dim_customers -> fact_sales [label="1 to many", dir=back, arrowtail=crow, arrowhead=tee];
+    dim_products  -> fact_sales [label="1 to many", dir=back, arrowtail=crow, arrowhead=tee];
+    dim_stores    -> fact_sales [label="1 to many", dir=back, arrowtail=crow, arrowhead=tee];
+    dim_products  -> fact_inventory [label="1 to many", dir=back, arrowtail=crow, arrowhead=tee];
+    dim_warehouses-> fact_inventory [label="1 to many", dir=back, arrowtail=crow, arrowhead=tee];
+    fact_sales    -> fact_returns [label="1 to many", dir=back, arrowtail=crow, arrowhead=tee];
+
+    label="Enterprise Retail Analytics Platform — Entity Relationship Diagram\n(Star Schema: 4 Dimensions + 3 Facts)";
+    labelloc="t";
+    fontsize=18;
+    fontname="Helvetica-Bold";
+}

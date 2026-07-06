@@ -1,0 +1,321 @@
+/* ============================================================================
+   Enterprise Retail Analytics Platform — DAX Measure Library
+   ============================================================================
+   64 measures across 11 categories. Paste into Power BI Desktop after the
+   data model in data_model.md is built (dim_date is REQUIRED for every
+   time-intelligence measure below — TOTALYTD/SAMEPERIODLASTYEAR/DATEADD all
+   need a real marked Date table, not the auto date hierarchy).
+
+   Convention: base measures reference physical columns; every derived
+   measure (growth %, rank, variance) references OTHER MEASURES, not raw
+   columns — this is the standard pattern that keeps a DAX model maintainable
+   as it grows (change the base measure once, everything downstream updates).
+   ============================================================================ */
+
+
+-- ============================================================================
+-- 1. BASE / CORE MEASURES  (foundation every other measure builds on)
+-- ============================================================================
+
+Total Revenue = SUM(fact_sales[SalesAmount])
+
+Total Profit = SUM(fact_sales[Profit])
+
+Total Orders = COUNTROWS(fact_sales)
+
+Total Units Sold = SUM(fact_sales[Quantity])
+
+Distinct Customers = DISTINCTCOUNT(fact_sales[customer_id])
+
+Average Order Value = DIVIDE([Total Revenue], [Total Orders])
+
+Average Discount % = AVERAGE(fact_sales[discount])
+
+Total Refunds = CALCULATE(SUM(fact_returns[refund_amount]), fact_returns[return_status] IN {"Approved","Refunded"})
+
+
+-- ============================================================================
+-- 2. MARGIN / PROFITABILITY MEASURES
+-- ============================================================================
+
+Gross Margin % = DIVIDE([Total Profit], [Total Revenue])
+
+Net Profit = [Total Profit] - [Total Refunds]
+
+Net Margin % = DIVIDE([Net Profit], [Total Revenue])
+
+Profit per Customer = DIVIDE([Total Profit], [Distinct Customers])
+
+Profit per Order = DIVIDE([Total Profit], [Total Orders])
+
+
+-- ============================================================================
+-- 3. RUNNING TOTAL / YTD / MTD / QTD / ROLLING-12
+-- ============================================================================
+-- All require the ACTIVE relationship dim_date[Date] -> fact_sales[OrderDate]
+
+Running Total Revenue =
+CALCULATE(
+    [Total Revenue],
+    FILTER(ALLSELECTED(dim_date), dim_date[Date] <= MAX(dim_date[Date]))
+)
+
+Revenue YTD = TOTALYTD([Total Revenue], dim_date[Date])
+
+Revenue MTD =
+CALCULATE(
+    [Total Revenue],
+    FILTER(ALLSELECTED(dim_date), dim_date[Year]=YEAR(MAX(dim_date[Date]))
+        && dim_date[Month Number]=MONTH(MAX(dim_date[Date]))
+        && dim_date[Date] <= MAX(dim_date[Date]))
+)
+
+Revenue QTD = TOTALQTD([Total Revenue], dim_date[Date])
+
+Profit YTD = TOTALYTD([Total Profit], dim_date[Date])
+
+Rolling 12 Month Revenue =
+CALCULATE(
+    [Total Revenue],
+    DATESINPERIOD(dim_date[Date], MAX(dim_date[Date]), -12, MONTH)
+)
+
+Rolling 3 Month Revenue =
+CALCULATE(
+    [Total Revenue],
+    DATESINPERIOD(dim_date[Date], MAX(dim_date[Date]), -3, MONTH)
+)
+
+Prior Year Revenue = CALCULATE([Total Revenue], SAMEPERIODLASTYEAR(dim_date[Date]))
+
+Prior Year Revenue YTD = CALCULATE([Revenue YTD], SAMEPERIODLASTYEAR(dim_date[Date]))
+
+
+-- ============================================================================
+-- 4. MOVING AVERAGES
+-- ============================================================================
+
+Revenue 3-Month Moving Avg =
+AVERAGEX(
+    DATESINPERIOD(dim_date[Date], MAX(dim_date[Date]), -3, MONTH),
+    CALCULATE([Total Revenue], dim_date[Date])
+)
+
+Revenue 7-Day Moving Avg =
+AVERAGEX(
+    DATESINPERIOD(dim_date[Date], MAX(dim_date[Date]), -7, DAY),
+    CALCULATE([Total Revenue], dim_date[Date])
+)
+
+Orders 3-Month Moving Avg =
+AVERAGEX(
+    DATESINPERIOD(dim_date[Date], MAX(dim_date[Date]), -3, MONTH),
+    CALCULATE([Total Orders], dim_date[Date])
+)
+
+
+-- ============================================================================
+-- 5. GROWTH % (MoM / QoQ / YoY)
+-- ============================================================================
+
+Revenue Prior Month = CALCULATE([Total Revenue], DATEADD(dim_date[Date], -1, MONTH))
+
+MoM Growth % = DIVIDE([Total Revenue] - [Revenue Prior Month], [Revenue Prior Month])
+
+Revenue Prior Quarter = CALCULATE([Total Revenue], DATEADD(dim_date[Date], -1, QUARTER))
+
+QoQ Growth % = DIVIDE([Total Revenue] - [Revenue Prior Quarter], [Revenue Prior Quarter])
+
+YoY Growth % = DIVIDE([Total Revenue] - [Prior Year Revenue], [Prior Year Revenue])
+
+YoY Growth % (YTD) = DIVIDE([Revenue YTD] - [Prior Year Revenue YTD], [Prior Year Revenue YTD])
+
+Profit YoY Growth % =
+VAR PriorYearProfit = CALCULATE([Total Profit], SAMEPERIODLASTYEAR(dim_date[Date]))
+RETURN DIVIDE([Total Profit] - PriorYearProfit, PriorYearProfit)
+
+
+-- ============================================================================
+-- 6. RANKING MEASURES
+-- ============================================================================
+
+Product Revenue Rank =
+RANKX(ALLSELECTED(dim_products[ProductID]), [Total Revenue], , DESC, DENSE)
+
+Customer LTV Rank =
+RANKX(ALLSELECTED(dim_customers[CustomerID]), [Total Revenue], , DESC, DENSE)
+
+Store Revenue Rank =
+RANKX(ALLSELECTED(dim_stores[StoreID]), [Total Revenue], , DESC, DENSE)
+
+Category Profit Rank =
+RANKX(ALLSELECTED(dim_products[Category]), [Total Profit], , DESC, DENSE)
+
+Is Top 10 Product = IF([Product Revenue Rank] <= 10, "Top 10", "Other")
+
+
+-- ============================================================================
+-- 7. DYNAMIC KPI / DYNAMIC TITLE MEASURES
+-- ============================================================================
+-- Pattern: a disconnected "KPI Selector" table with one text column lets a
+-- single slicer drive which measure a card/chart displays — avoids needing
+-- N separate visuals for N KPIs.
+
+Selected KPI Value =
+SWITCH(
+    SELECTEDVALUE('KPI Selector'[KPI Name]),
+    "Revenue", [Total Revenue],
+    "Profit", [Total Profit],
+    "Orders", [Total Orders],
+    "Margin %", [Gross Margin %],
+    "AOV", [Average Order Value],
+    [Total Revenue]   -- default
+)
+
+Dynamic Dashboard Title =
+"Performance: " & SELECTEDVALUE('KPI Selector'[KPI Name], "Revenue") &
+" | " & FORMAT(MIN(dim_date[Date]), "MMM YYYY") & " – " & FORMAT(MAX(dim_date[Date]), "MMM YYYY")
+
+Dynamic Subtitle YoY =
+VAR Growth = [YoY Growth %]
+RETURN
+    SELECTEDVALUE('KPI Selector'[KPI Name], "Revenue") & " is " &
+    IF(Growth >= 0, "up ", "down ") & FORMAT(ABS(Growth), "0.0%") & " YoY"
+
+Selected Region Label = SELECTEDVALUE(dim_stores[Region], "All Regions")
+
+Filter Context Description =
+"Showing: " & [Selected Region Label] & " | " &
+COALESCE(SELECTEDVALUE(dim_products[Category]), "All Categories")
+
+
+-- ============================================================================
+-- 8. CONDITIONAL FORMATTING HELPER MEASURES
+-- ============================================================================
+-- These return text/numeric flags consumed by Power BI's conditional
+-- formatting rules (background color / icon sets) on tables and cards.
+
+Margin Health Flag =
+SWITCH(
+    TRUE(),
+    [Gross Margin %] >= 0.20, "Healthy",
+    [Gross Margin %] >= 0.10, "Watch",
+    "At Risk"
+)
+
+Growth Trend Icon =
+SWITCH(
+    TRUE(),
+    [MoM Growth %] > 0.02, "▲",
+    [MoM Growth %] < -0.02, "▼",
+    "▬"
+)
+
+KPI Color Code =
+SWITCH(
+    TRUE(),
+    [Margin Health Flag] = "Healthy", "#2E7D32",
+    [Margin Health Flag] = "Watch", "#F9A825",
+    "#C62828"
+)
+
+Above or Below Trailing Average =
+IF([Total Revenue] >= [Revenue 3-Month Moving Avg], "Above Trend", "Below Trend")
+
+
+-- ============================================================================
+-- 9. VARIANCE ANALYSIS (Actual vs Target / Budget)
+-- ============================================================================
+-- Assumes a 'Targets' table (Month, TargetRevenue) loaded separately and
+-- related to dim_date — common in retail FP&A reporting.
+
+Target Revenue = SUM('Targets'[TargetRevenue])
+
+Revenue Variance vs Target = [Total Revenue] - [Target Revenue]
+
+Revenue Variance % vs Target = DIVIDE([Revenue Variance vs Target], [Target Revenue])
+
+Variance Status =
+SWITCH(
+    TRUE(),
+    [Revenue Variance % vs Target] >= 0, "On/Above Target",
+    [Revenue Variance % vs Target] >= -0.05, "Slightly Below",
+    "Materially Below"
+)
+
+
+-- ============================================================================
+-- 10. FORECAST COMPARISON
+-- ============================================================================
+-- Assumes the 'revenue_forecast_next_12_months.csv' output from
+-- python/forecasting.py is loaded as a table named 'Forecast'.
+
+Forecasted Revenue = SUM(Forecast[Forecasted_Revenue])
+
+Forecast Lower Bound = SUM(Forecast[Lower_95CI])
+
+Forecast Upper Bound = SUM(Forecast[Upper_95CI])
+
+Actual vs Forecast Variance = [Total Revenue] - [Forecasted Revenue]
+
+Actual vs Forecast Variance % = DIVIDE([Actual vs Forecast Variance], [Forecasted Revenue])
+
+Is Actuals Within Forecast CI =
+IF(
+    [Total Revenue] >= [Forecast Lower Bound] && [Total Revenue] <= [Forecast Upper Bound],
+    "Within Range", "Outside Range"
+)
+
+
+-- ============================================================================
+-- 11. CUSTOMER / INVENTORY / RETURNS SPECIFIC MEASURES
+-- ============================================================================
+
+Repeat Purchase Rate =
+VAR CustomersWithMultipleOrders =
+    CALCULATE(
+        DISTINCTCOUNT(fact_sales[customer_id]),
+        FILTER(
+            VALUES(fact_sales[customer_id]),
+            CALCULATE(COUNTROWS(fact_sales)) > 1
+        )
+    )
+RETURN DIVIDE(CustomersWithMultipleOrders, [Distinct Customers])
+
+Average Customer Lifetime Value = AVERAGE(dim_customers[LifetimeValue])
+
+Return Rate % = DIVIDE(DISTINCTCOUNT(fact_returns[ReturnID]), [Total Orders])
+
+Refund Cost Ratio = DIVIDE([Total Refunds], [Total Revenue])
+
+Inventory Turnover Ratio =
+DIVIDE(SUM(fact_inventory[SoldStock]), AVERAGE(fact_inventory[ClosingStock]))
+
+Stockout Rate % =
+DIVIDE(
+    CALCULATE(COUNTROWS(fact_inventory), fact_inventory[ClosingStock] = 0),
+    COUNTROWS(fact_inventory)
+)
+
+Dead Stock Flag =
+IF(
+    SUM(fact_inventory[ClosingStock]) > 0 && SUM(fact_inventory[SoldStock]) = 0,
+    "Dead Stock", "Active"
+)
+
+Churn Risk Customers =
+CALCULATE(
+    DISTINCTCOUNT(fact_sales[customer_id]),
+    FILTER(
+        VALUES(fact_sales[customer_id]),
+        CALCULATE(MAX(fact_sales[OrderDate])) < MAX(dim_date[Date]) - 180
+    )
+)
+
+/* ============================================================================
+   END — 64 measures total:
+   8 (Base) + 5 (Margin) + 9 (Time Intelligence) + 3 (Moving Avg)
+   + 7 (Growth %) + 5 (Ranking) + 5 (Dynamic KPI/Title) + 4 (Conditional Fmt)
+   + 4 (Variance) + 6 (Forecast) + 8 (Customer/Inventory/Returns) = 64 measures
+   (exceeds the 50+ requirement)
+   ============================================================================ */
