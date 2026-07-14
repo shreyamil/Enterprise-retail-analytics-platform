@@ -361,12 +361,6 @@ seasonality directly.
 
 ---
 
-## Author
-
-Built as a flagship portfolio project demonstrating Senior Data Analyst /
-Business Intelligence Analyst skills — covering the full analytics lifecycle
-from data engineering through statistical analysis, forecasting, and
-executive-level dashboarding.
 
 Suitable for roles at: top-tier technology companies, management consulting firms,
 retail/e-commerce analytics teams, and enterprise BI practices.
